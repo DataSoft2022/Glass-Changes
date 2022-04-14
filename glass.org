@@ -1,6 +1,4 @@
-#+TITLE: Glass Manufacture
-
-* Glass Changes
+* Glass Manufacture Changes
 ** doctypes
 *** Purchase Receipt List
     new child table
@@ -24,7 +22,7 @@
     | Cur Amount        | Currency | account_currency |
     | Cur Exchange Rate | Float    |                  |
 
-    check *Cur Amount* in list view and uncheck *Amount*
+    check *Cur Amount* in list view and uncheck *Amount* in list view
 
 ** scripts
 *** Purchase Invoice
