@@ -120,8 +120,4 @@ frappe.ui.form.on('Purchase Taxes and Charges', {
        
    }
 });
-
-function delay(time) {
-    return new Promise(resolve => setTimeout(resolve, time));
-}
     #+END_SRC
