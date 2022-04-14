@@ -1,0 +1,129 @@
+#+TITLE: Glass Manufacture
+
+* Glass Changes
+** doctypes
+*** Purchase Receipt List
+    new child table
+    | Label   | Type | Options          |
+    |---------+------+------------------|
+    | Reciept | Link | Purchase Receipt |
+
+*** Purchase Invoice
+    customized the table by the following
+    row *77* & *78* 
+    | Label            | Type          | Options               |
+    |------------------+---------------+-----------------------|
+    | Purchase Receipt | Section Break |                       |
+    | Receipts         | Table         | Purchase Receipt List |
+
+*** Purchase Taxes and Charges
+    customized the table by the following
+    row *16* & *17*
+    | Label             | Type     | Options          |
+    |-------------------+----------+------------------|
+    | Cur Amount        | Currency | account_currency |
+    | Cur Exchange Rate | Float    |                  |
+
+    check *Cur Amount* in list view and uncheck *Amount*
+
+** scripts
+*** Purchase Invoice
+    added the following code
+
+    #+BEGIN_SRC js
+    frappe.ui.form.off('Purchase Invoice', 'onload');
+frappe.ui.form.on('Purchase Invoice', {
+    supplier: function(frm) {
+        frm.fields_dict['taxes'].grid.fields_map["account_head"].get_query = function() {
+                        return {    
+                            filters:[
+                                ['name', '!=', 'None']
+                            ]
+                        };
+                 };
+    if(frm.doc.supplier) {
+            frappe.call({
+                method: 'frappe.client.get',
+                args: {
+                    'doctype': 'Supplier',
+                    'name': frm.doc.supplier,
+                },
+                callback: function(r) {
+                    let supplier = r.message
+                    if(supplier.shipping == 0) {
+                         frm.set_df_property("receipts", "hidden", 1);
+                    }
+                    else {
+                        frm.set_df_property("receipts", "hidden", 0);
+                        frappe.call({
+                            method: 'frappe.client.get_list',
+                            args: {
+                                'doctype': 'Purchase Receipt',
+                                'filters': {'supplier': supplier.name}
+                            },
+                            callback: function(r) {
+                                let receipts = r.message;
+                                frm.doc.receipts = [];
+                                receipts.forEach(receipt => {
+                                    var childTable = frm.add_child("receipts");
+                                    childTable.reciept = receipt.name;
+                                })
+                                refresh_field("receipts")
+                            }
+                        })
+                    }
+                }
+            });
+        }
+    }
+});
+
+
+frappe.ui.form.on('Purchase Taxes and Charges', {
+   account_head: function(frm) {
+       let row = frm.selected_doc;
+	    if(row.account_head && row.charge_type == "Actual") {
+	        frappe.call({
+                method: 'frappe.client.get',
+                args: {
+                    'doctype': 'Company',
+                    'name': frm.doc.company
+                },
+                callback: function(r) {
+                    if(r.message.default_currency == row.account_currency) {
+                        row.cur_exchange_rate = 1;
+                        refresh_field('taxes');
+                    }
+                    else {
+                        frappe.call({ // getting account details
+        	                method: 'frappe.client.get',
+        	                args: {
+        	                    'doctype': 'Currency Exchange',
+        	                    'filters': {
+        	                        'from_currency': row.account_currency,
+        	                        'to_currency': r.message.default_currency
+        	                    }
+        	                },
+        	                callback: function(r){
+        	                    row.cur_exchange_rate = r.message.exchange_rate;
+        	                    refresh_field('taxes');
+        	                    }
+                            });
+                    }
+    	       }
+    	    });
+    	   }
+        },
+   cur_amount: function(frm, cdt, cdn) {
+       let row = frm.selected_doc;
+       let t_amount = parseFloat(row.cur_exchange_rate) * parseFloat(row.cur_amount);
+       row.tax_amount = parseFloat(row.cur_exchange_rate) * parseFloat(row.cur_amount);
+       refresh_field('taxes')
+       
+   }
+});
+
+function delay(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+}
+    #+END_SRC
