@@ -1,4 +1,7 @@
 * Glass Manufacture Changes
+  changes related to multi currency
+  *under development*
+  
 ** doctypes
 *** Purchase Receipt List
     new child table

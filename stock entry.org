@@ -1,0 +1,39 @@
+* Multiple Stock Entry
+  this feature creates multiple *Stock Entry* for every work order
+  depending on items source warehouse.
+
+** Scripts
+
+***  Stock Entry
+    added the following script
+
+    #+BEGIN_SRC js
+      frappe.ui.form.on('Stock Entry', {
+	  after_save: function(frm) {
+	      let item = frm.doc.items[0].s_warehouse;
+	      let found = 0;
+	      for(let i = 0; i < frm.doc.items.length; i++)
+		  if(frm.doc.items[i].s_warehouse != item) {
+		      found = 1;
+		      break;
+		  }
+	      if(found === 1) {
+		  frappe.call({
+		      method: 'glass.api.multi_stock_entry',
+		      args: {
+			  'doc': frm.doc.name
+		      },
+		      callback: function(r) {
+			  console.log(r.message);
+		      }
+		  });
+	      }
+	  },
+    });
+    #+END_SRC
+
+** apps
+
+*** Glass
+    created glass app
+    SRC: [[https://github.com/DataSoft2022/Glass.git][Glass]]
