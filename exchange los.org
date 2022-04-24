@@ -1,0 +1,106 @@
+* exchange gain and loss payment entry
+
+#+BEGIN_SRC js
+frappe.ui.form.on('Payment Entry', {
+    write_off_difference_amount: function(frm) {
+		frm.events.set_deductions_entry(frm, "write_off_account");
+	},
+	set_exchange_gain: function(frm) {
+		frm.events.set_deductions_entry(frm, "exchange_gain_loss_account");
+	},
+	refresh: function(frm) {
+	    	frm.events.hide_unhide_fields(frm);
+	},
+	set_deductions_entry: function(frm, account) {
+	if(frm.doc.difference_amount) {
+		frappe.call({
+			method: "erpnext.accounts.doctype.payment_entry.payment_entry.get_company_defaults",
+			args: {
+				company: frm.doc.company
+			},
+			callback: function(r, rt) {
+				if(r.message) {
+					var write_off_row = $.map(frm.doc["deductions"] || [], function(t) {
+						return t.account==r.message[account] ? t : null; });
+
+					var row = [];
+
+					var difference_amount = flt(frm.doc.difference_amount,
+						precision("difference_amount"));
+
+					if (!write_off_row.length && difference_amount) {
+						row = frm.add_child("deductions");
+						row.account = r.message[account];
+						row.cost_center = r.message["cost_center"];
+					} else {
+						row = write_off_row[0];
+					}
+
+					if (row) {
+						row.amount = flt(row.amount) + difference_amount;
+					} else {
+						frappe.msgprint(__("No gain or loss in the exchange rate"))
+					}
+
+					refresh_field("deductions");
+
+					frm.events.set_unallocated_amount(frm);
+				}
+			}
+		})
+    	}
+    },
+    set_unallocated_amount: function(frm) {
+		var unallocated_amount = 0;
+		var total_deductions = frappe.utils.sum($.map(frm.doc.deductions || [],
+			function(d) { return flt(d.amount) }));
+
+		if(frm.doc.party) {
+			if(frm.doc.payment_type == "Receive"
+				&& frm.doc.base_total_allocated_amount < frm.doc.base_received_amount + total_deductions
+				&& frm.doc.total_allocated_amount < frm.doc.paid_amount + (total_deductions / frm.doc.source_exchange_rate)) {
+					unallocated_amount = (frm.doc.base_received_amount + total_deductions + frm.doc.base_total_taxes_and_charges
+						- frm.doc.base_total_allocated_amount) / frm.doc.source_exchange_rate;
+			} else if (frm.doc.payment_type == "Pay"
+				&& frm.doc.base_total_allocated_amount < frm.doc.base_paid_amount - total_deductions
+				&& frm.doc.total_allocated_amount < frm.doc.received_amount + (total_deductions / frm.doc.target_exchange_rate)) {
+					unallocated_amount = (frm.doc.base_paid_amount + frm.doc.base_total_taxes_and_charges - (total_deductions
+						+ frm.doc.base_total_allocated_amount)) / frm.doc.target_exchange_rate;
+			}
+		}
+		frm.set_value("unallocated_amount", unallocated_amount);
+		frm.trigger("set_difference_amount");
+	},
+	set_difference_amount: function(frm) {
+		var difference_amount = 0;
+		var base_unallocated_amount = flt(frm.doc.unallocated_amount) *
+			(frm.doc.payment_type=="Receive" ? frm.doc.source_exchange_rate : frm.doc.target_exchange_rate);
+
+		var base_party_amount = flt(frm.doc.base_total_allocated_amount) + base_unallocated_amount;
+
+		if(frm.doc.payment_type == "Receive") {
+			difference_amount = base_party_amount - flt(frm.doc.base_received_amount);
+		} else if (frm.doc.payment_type == "Pay") {
+			difference_amount = flt(frm.doc.base_paid_amount) - base_party_amount;
+		} else {
+			difference_amount = flt(frm.doc.base_paid_amount) - flt(frm.doc.base_received_amount);
+		}
+
+		var total_deductions = frappe.utils.sum($.map(frm.doc.deductions || [],
+			function(d) { return flt(d.amount) }));
+
+		frm.set_value("difference_amount", difference_amount - total_deductions +
+			frm.doc.base_total_taxes_and_charges);
+
+		frm.events.hide_unhide_fields(frm);
+	},
+	hide_unhide_fields: function(frm) {
+	    var party_amount = frm.doc.payment_type=="Receive" ?
+			frm.doc.paid_amount : frm.doc.received_amount;
+	    frm.toggle_display("set_exchange_gain_loss",
+		    frm.doc.paid_amount && frm.doc.received_amount && frm.doc.difference_amount);
+    	frm.toggle_display("write_off_difference_amount", (frm.doc.difference_amount && frm.doc.party &&
+        	(frm.doc.total_allocated_amount > party_amount)));
+	}
+})
+#+END_SRC
