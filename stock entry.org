@@ -8,28 +8,53 @@
     added the following script
 
     #+BEGIN_SRC js
-      frappe.ui.form.on('Stock Entry', {
-	  after_save: function(frm) {
-	      let item = frm.doc.items[0].s_warehouse;
-	      let found = 0;
-	      for(let i = 0; i < frm.doc.items.length; i++)
-		  if(frm.doc.items[i].s_warehouse != item) {
-		      found = 1;
-		      break;
-		  }
-	      if(found === 1) {
-		  frappe.call({
-		      method: 'glass.api.multi_stock_entry',
-		      args: {
-			  'doc': frm.doc.name
-		      },
-		      callback: function(r) {
-			  console.log(r.message);
-		      }
-		  });
-	      }
-	  },
-    });
+     function is_saved_doc(frm) {
+    if(frappe.get_doc("Stock Entry", {'name': frm.doc.name}) == null ||frappe.get_doc("Stock Entry", {'name': frm.doc.name}).__unsaved == 1 ) {
+	return false
+    }
+    return true 
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+frappe.ui.form.on('Stock Entry', {
+    refresh: function(frm) {
+        frm.add_custom_button(('Spread'), function(){
+            frm.save();
+            async function spreading() {
+		while(!is_saved_doc(frm)) {
+                    await sleep(500);
+		}
+		let item = frm.doc.items[0].s_warehouse;
+		let found = 0;
+		for(let i = 0; i < frm.doc.items.length; i++)
+		    if(frm.doc.items[i].s_warehouse != item) {
+			found = 1;
+			break;
+		    }
+		if(found === 1) {
+    		    frappe.call({
+    			method: 'glass.api.multi_stock_entry',
+    			args: {
+    			    'doc': frm.doc.name
+    			},
+    			callback: function(r) {
+    		            frappe.show_alert({
+				message:__('Spreading done Successfully'),
+				indicator:'green'
+                            }, 5);
+
+    			}
+    		    });
+		}
+            }
+            spreading();
+
+        });
+    },
+});
     #+END_SRC
 
 ** apps
