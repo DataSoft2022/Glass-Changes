@@ -1,6 +1,6 @@
 * Multiple Stock Entry
-  this feature creates multiple *Stock Entry* for every work order
-  depending on items source warehouse.
+  this feature creates multiple *Stock Entry* based on splitting option 
+  you choose from by clicking on a custom button *Split By* at the top of form.
 
 ** Scripts
 
@@ -8,7 +8,7 @@
     added the following script
 
     #+BEGIN_SRC js
-     function is_saved_doc(frm) {
+    function is_saved_doc(frm) {
     if(frappe.get_doc("Stock Entry", {'name': frm.doc.name}) == null ||frappe.get_doc("Stock Entry", {'name': frm.doc.name}).__unsaved == 1 ) {
 	return false
     }
@@ -19,46 +19,86 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-frappe.ui.form.on('Stock Entry', {
-    refresh: function(frm) {
-        frm.add_custom_button(('Spread'), function(){
-            frm.save();
-            async function spreading() {
-		while(!is_saved_doc(frm)) {
-                    await sleep(500);
-		}
-		let item = frm.doc.items[0].s_warehouse;
-		let found = 0;
-		for(let i = 0; i < frm.doc.items.length; i++)
-		    if(frm.doc.items[i].s_warehouse != item) {
-			found = 1;
-			break;
-		    }
-		if(found === 1) {
-    		    frappe.call({
-    			method: 'glass.api.multi_stock_entry',
-    			args: {
-    			    'doc': frm.doc.name
-    			},
-    			callback: function(r) {
-    		            frappe.show_alert({
-				message:__('Spreading done Successfully'),
-				indicator:'green'
-                            }, 5);
+   frappe.ui.form.on('Stock Entry', {
+      onload: function(frm) {
+          if(frm.doc.work_order && frm.doc.__unsaved == 1) {
+              frappe.call({
+              method: 'frappe.client.get',
+              args: {
+                  'doctype': 'Work Order',
+                  'name': frm.doc.work_order
+              },
+              callback: function(r) {
+                  if(r.message) {
+                      let resp = r.message;
+                      let st_i = 0;
+                      let wo_i = 0;
+                      while(st_i < frm.doc.items.length) {
+                          if(frm.doc.items[st_i].item_code == resp.required_items[wo_i].item_code) {
+                              frm.doc.items[st_i].operation = resp.required_items[wo_i].operation;
+                              st_i += 1;
+                              wo_i += 1;
+                          }
+                          else {
+                              wo_i += 1;
+                          }
+                      }
+                      refresh_field('items');
+                  }
+              }
+            })
+          }
+          
+      },
+      refresh: function(frm) {
+        frm.add_custom_button(('Source Warehouse'), function(){
+          frm.save();
+          split_by(frm, 's_warehouse');
 
-    			}
-    		    });
-		}
-            }
-            spreading();
+        },("Split By"));
+        frm.add_custom_button(('Operation'), function(){
+          frm.save();
+          split_by(frm, 'operation');
 
-        });
-    },
-});
+        }, ("Split By"));
+	  },
+ });
+ 
+ async function split_by(frm, topic) {
+    while(!is_saved_doc(frm)) {
+        await sleep(500);
+    }
+
+  frappe.call({
+      method: 'glass.api.multi_stock_entry',
+      args: {
+	  'doc': frm.doc.name,
+	  'split_key': topic
+      },
+      callback: function(r) {
+          frappe.set_route("stock-entry");
+          frappe.show_alert({
+                message:__('Splitiing done Successfully'),
+                indicator:'green'
+            }, 5);
+
+      }
+  });
+
+}
     #+END_SRC
 
 ** apps
 
 *** Glass
-    created glass app
-    SRC: [[https://github.com/DataSoft2022/Glass.git][Glass]]
+    created glass app: [[https://github.com/DataSoft2022/Glass.git][Glass]]
+
+** customization
+*** Stock Entry Detail
+   added field in *row 68*
+
+   | Label     | Type | Options   |
+   |-----------+------+-----------|
+   | Operation | Link | Operation |
+
+   
