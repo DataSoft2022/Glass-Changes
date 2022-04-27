@@ -8,11 +8,11 @@
     added the following script
 
     #+BEGIN_SRC js
-    function is_saved_doc(frm) {
-    if(frappe.get_doc("Stock Entry", {'name': frm.doc.name}) == null ||frappe.get_doc("Stock Entry", {'name': frm.doc.name}).__unsaved == 1 ) {
-	return false
+function is_saved_doc(frm) {
+    if(frappe.get_doc("Stock Entry", {'name': frm.doc.name}) === null ||frappe.get_doc("Stock Entry", {'name': frm.doc.name}).__unsaved == 1 ) {
+	return false;
     }
-    return true 
+    return true;
 }
 
 function sleep(ms) {
@@ -33,24 +33,22 @@ function sleep(ms) {
                       let resp = r.message;
                       let st_i = 0;
                       let wo_i = 0;
-                      while(st_i < frm.doc.items.length) {
-                          if(frm.doc.items[st_i].item_code == resp.required_items[wo_i].item_code) {
-                              frm.doc.items[st_i].operation = resp.required_items[wo_i].operation;
-                              st_i += 1;
-                              wo_i += 1;
-                          }
-                          else {
-                              wo_i += 1;
-                          }
-                      }
-                      refresh_field('items');
+
+                    frappe.show_progress("Operation", 0, frm.doc.items.length, "Organizing Operations");
+                    for(let i = 0; i < frm.doc.items.length; i++) {
+                        frm.doc.items[i].operation = resp.required_items[i].operation;
+                        frappe.show_progress("Operation", i, frm.doc.items.length, "Organizing Operations");
+                    }
+                    frappe.show_progress("Operation", frm.doc.items.length, frm.doc.items.length, "Organizing Operations");
+                    frappe.hide_progress();
+                    refresh_field('items');
                   }
               }
-            })
+            });
           }
           
       },
-      refresh: function(frm) {
+	  refresh: function(frm) {
         frm.add_custom_button(('Source Warehouse'), function(){
           frm.save();
           split_by(frm, 's_warehouse');
