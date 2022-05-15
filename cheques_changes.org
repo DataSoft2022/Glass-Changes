@@ -1,0 +1,132 @@
+* cheque changes
+  changes to cheque doctype 
+** scripts
+  - collect_check overwritten in *Check* doctype
+
+  #+BEGIN_SRC js
+collect_check:function(frm) {
+    
+   //frappe.client.set_value("Check", curfrm.doc.name, "status","Collected")
+ //   frappe.client.set_value("Check", frm.doc.name, "originl_mode_of_payment",frm.doc.affected_account)
+
+				var jobOrder = frappe.model.get_new_doc('Payment Entry');
+				jobOrder.payment_type='Internal Transfer',
+				jobOrder.paid_from=frm.doc.paid_from;
+				jobOrder.paid_to=frm.doc.affected_account
+				jobOrder.posting_date=get_today()
+				jobOrder.paid_amount=frm.doc.amount
+				jobOrder.received_amount=frm.doc.amount
+				
+				jobOrder.base_paid_amount=frm.doc.amount;
+				jobOrder.reference_no=frm.doc.check_no,
+				jobOrder.reference_date=frm.doc.check_date
+				jobOrder.cheque_status='Collected'
+				jobOrder.cheque_=frm.doc.name
+	            jobOrder.reference_date= frm.doc.check_date
+	            jobOrder.mode_of_payment = frm.doc.affected_account;
+	            jobOrder.to_mode_of_payment = frm.doc.originl_mode_of_payment
+				frappe.set_route('Form', 'Payment Entry', jobOrder.name);
+				
+                            frappe.call({
+                            "method": "frappe.client.set_value",
+                            "args": {
+                            //replace "Target DocType" with the actual target doctype
+                            "doctype": 'Check',
+                            //replace target_doctype_link with a link to the document to be changed
+                            "name":  frm.doc.name,
+                            "fieldname": {
+                            
+                            "status" : "Collected",
+                            // "paid_from":frm.doc.affected_account
+                            "originl_mode_of_payment": frm.doc.affected_account,
+                            "affected_account": ""
+                            },
+                            }
+                            });
+        
+			
+	}
+  #+END_SRC
+
+  
+  - updated before_save, after_cancel and onload in *Payment Entry* 
+
+  #+BEGIN_SRC js
+      before_save: function(frm) {
+        let total_amount = 0;
+        try {
+            if(frm.doc.check_list.length == 1) 
+                total_amount = parseFloat(frm.doc.check_list[0].amount);
+            else 
+                total_amount = frm.doc.check_list.reduce((a, b) => 
+                                            parseFloat(a.amount) + parseFloat(b.amount));
+        } catch(e) {}
+        
+        if(frm.doc.cheque_status === "Open" && total_amount !== parseFloat(frm.doc.paid_amount))
+            frappe.throw("Check the total cheque amount");
+    },
+    after_cancel: function(frm) {
+        try {
+            frm.doc.check_list.map(check => frappe.db.delete_doc("Check", check.check_no));
+        } catch(e) {}
+    },
+    onload: function(frm) {
+        let invoice = '';
+        try {
+                invoice = frm.doc.references[0].reference_name;
+        }
+        catch(err) {}
+
+        if(frm.doc.to_mode_of_payment) {
+            frappe.call({
+                method: 'frappe.client.get',
+                args: {
+                    'doctype': 'Mode of Payment',
+                    'name': frm.doc.to_mode_of_payment
+                },
+                callback: function(r) {
+                    frappe.model.set_value("Payment Entry", frm.doc.name, "paid_to", r.message.accounts[0].default_account);
+                }
+            });
+        }
+            
+
+        
+        if(invoice){
+            if (frm.doc.check_list  && frm.doc.check_list.length === 0 &&
+                frm.doc.references[0].reference_doctype == 'Sales Invoice'){
+            frappe.call({
+                    method: 'frappe.client.get',
+                    args: {
+                            'doctype': 'Sales Invoice',
+                            'name': invoice
+                    },
+                     callback: function(r) {
+                        if (!r.exc) {
+                            if(r.message.payment_schedule_cur.length > 0)
+                                r = r.message.payment_schedule_cur;
+                            else 
+                                r = r.message.payment_schedule;
+                                
+                            frm.doc.check_list = [];
+                            r.forEach((check) => {
+                                const entry = frm.add_child('check_list');
+                                entry.due_date = check.due_date;
+                                entry.amount = check.payment_amount;
+                                refresh_field('check_list');
+                            });
+                        }
+                    }
+                });
+        }
+        }
+    },
+  #+END_SRC
+
+
+
+** Doctypes
+
+   - rename *affected_account* to _To Account_ and Options to _Mode of Payment_
+
+   - rename *originl_mode_of_payment* to _From Account_
